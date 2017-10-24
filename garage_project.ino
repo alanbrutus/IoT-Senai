@@ -12,8 +12,12 @@ int speedClose = 15;
 boolean lockDoor = true;
 boolean light = false;
 int spotLight = 3;
-char actionDoor = 'A';
+int button = 8;
+char actionDoor = 'F';
 char beforeActionDoor = 'F';
+
+int buttonState = 0;
+int buttonStateBefore = 0;
 
 char topicPub[] = "Garage_Project";
 char topicSub[] = "Garage_Project";
@@ -52,35 +56,41 @@ char passMQTT[] = "S3n41-1o7";
 void setup() {
 
   serialSetup();
-  ethernetSetup();
-  serverMQTTSetup();
+//  ethernetSetup();
+//  serverMQTTSetup();
   pinMode(spotLight, OUTPUT);
+  pinMode(button, INPUT);
   myservo.attach(7);
   
 }
 
 void loop() {
 
-  inputRequest();
+  //inputRequest();
+  readButtonState();
 
-  if ((actionDoor == 'A' && lockDoor) || (actionDoor == 'F' && !lockDoor)) {
+  if (actionDoor != beforeActionDoor) {
+
+     if ((actionDoor == 'A' && lockDoor) || (actionDoor == 'F' && !lockDoor)) {
     
-     if (lockDoor) {
-        lockDoor = openDoor();
-        delay(1000);
-        light = lightOn();
-     } else {
-        lockDoor = closeDoor();
-        delay(1000);
-       light = lightOff();    
-     }
+        if (lockDoor) {
+           lockDoor = openDoor();
+           delay(1000);
+           light = lightOn();
+        } else {
+          lockDoor = closeDoor();
+          delay(1000);
+          light = lightOff();    
+        }
 
-  } 
+     } 
   
-  showInformation();  
-  beforeActionDoor = actionDoor;
+     showInformation();  
+     beforeActionDoor = actionDoor;
 
-  delay(5000);
+    // delay(5000);
+
+  }
   
 }
 
@@ -191,3 +201,21 @@ void reconnectMQTT() {
    }
 
 }
+
+void readButtonState() {
+  
+   buttonState = digitalRead(button);
+
+    if (buttonState == LOW && buttonStateBefore == HIGH ) {
+      
+       if (actionDoor == 'A') {
+          actionDoor = 'F';
+       } else {
+          actionDoor = 'A';
+       }
+       
+    }
+
+    buttonStateBefore = buttonState;
+}
+
