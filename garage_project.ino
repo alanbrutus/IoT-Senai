@@ -12,12 +12,16 @@ int speedClose = 15;
 boolean lockDoor = true;
 boolean light = false;
 int spotLight = 3;
-int button = 8;
+int buttonDoor = 8;
+
 char actionDoor = 'F';
 char beforeActionDoor = 'F';
 
-int buttonState = 0;
-int buttonStateBefore = 0;
+int buttonDoorState = 0;
+int buttonDoorStateBefore = 0;
+
+int buttonLightState = 0;
+int buttonLightStateBefore = 0;
 
 char topicPub[] = "Garage_Project";
 char topicSub[] = "Garage_Project";
@@ -67,7 +71,8 @@ void setup() {
 void loop() {
 
   //inputRequest();
-  readButtonState();
+  readButtonDoorState();
+  readButtonLightState()
 
   if (actionDoor != beforeActionDoor) {
 
@@ -202,11 +207,11 @@ void reconnectMQTT() {
 
 }
 
-void readButtonState() {
+void readButtonDoorState() {
   
-   buttonState = digitalRead(button);
+   buttonDoorState = digitalRead(buttonDoor);
 
-    if (buttonState == LOW && buttonStateBefore == HIGH ) {
+    if (buttonDoorState == LOW && buttonDoorStateBefore == HIGH ) {
       
        if (actionDoor == 'A') {
           actionDoor = 'F';
@@ -216,6 +221,23 @@ void readButtonState() {
        
     }
 
-    buttonStateBefore = buttonState;
+    buttonDoorStateBefore = buttonDoorState;
+}
+
+void readButtonLightState() {
+  
+   buttonLightState = digitalRead(buttonLight);
+
+    if (buttonLightState == LOW && buttonLightStateBefore == HIGH ) {
+      
+       if (light) {
+          light = lightOff();
+       } else {
+          light = lightOn();
+       }
+       
+    }
+
+    buttonLightStateBefore = buttonLightState;
 }
 
