@@ -1,4 +1,4 @@
-#define ONLINE 1
+#define ONLINE 0
 
 #include <Servo.h>
 #include <Ethernet.h>
@@ -23,7 +23,7 @@ boolean lockDoor = true;
 boolean light = false;
 int spotLight = 3;
 
-int onlineLight = 13;
+int onlineLight = 12;
 int offlineLight = 2;
 
 int buttonDoor = 8;
@@ -140,33 +140,32 @@ void showInformation() {
 
   String message;
   char msgMQTT; 
-  
+
+  if (!client.connected()) {
+     reconnectMQTT();
+  }
+
   if (actionDoor == 'A' && beforeActionDoor == 'F') {
     message = "Garagem aberta e luzes acessas!";
-    if (!client.connected()) {
-       reconnectMQTT();
-    }
     client.publish(topicPub, "A");
     msgMQTT = "A";
-//    showInformationMQTT("A");
   } else if (actionDoor == 'F' && beforeActionDoor == 'A') {
     message = "Garagem fechada e luzes apagadas!";
-    if (!client.connected()) {
-       reconnectMQTT();
-    }
     client.publish(topicPub, "F");   
     msgMQTT = "F";
-//    showInformationMQTT("F");
+
   } else {
+    
     if (actionDoor == 'A') {
       message = "Nao e possivel abrir a porta! Garagem ja aberta!";
     } else {
       message = "Nao e possivel fechar a porta! Garagem ja fechada!";
     }
+    
   }
 
   Serial.println(message);
-      
+
 }
 
 boolean lightOn() {
@@ -217,7 +216,7 @@ void reconnectMQTT() {
           Serial.print("falha, rc=");
           Serial.print(client.state());
           Serial.println(" nova tentativa em 5 segundos");
-          delay(5000);
+          
           online = 0;
        }
    }
