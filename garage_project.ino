@@ -1,8 +1,18 @@
+#define ONLINE 1
+
 #include <Servo.h>
-#include <UIPEthernet.h>
-#include <utility/logging.h>
+#include <Ethernet.h>
 #include <SPI.h>
+
+#ifdef ONLINE
 #include <PubSubClient.h>
+#else
+#include <SerialPubSubClient.h>
+#endif
+
+//=======================================================================
+void callback(const char topic, byte* payload, unsigned int length);
+//=======================================================================
 
 Servo myservo;
 
@@ -12,7 +22,14 @@ int speedClose = 15;
 boolean lockDoor = true;
 boolean light = false;
 int spotLight = 3;
+
+int onlineLight = 13;
+int offlineLight = 2;
+
 int buttonDoor = 8;
+int buttonLight = 9;
+
+boolean online = 0;
 
 char actionDoor = 'F';
 char beforeActionDoor = 'F';
@@ -31,48 +48,39 @@ IPAddress ip (192, 162, 1, 100);
 char server[] = "m10.cloudmqtt.com";
 int port = 12598;
 
-//=======================================================================
-void callback(char topic, byte payload, unsigned int length) {
-
-  char* payloadAsChar = payload;
-  payloadAsChar[length] = 0;
-  String msg = String(payloadAsChar);
-  int msgComoNumero = msg.toInt();
-  
-  Serial.print("Topic received: "); Serial.println(topic);
-  Serial.print("Message: "); Serial.println(msg);
-
-  Serial.flush();
-  Serial.print("Numero recebido: "); Serial.println(msgComoNumero);
-  Serial.println(msg);
-  Serial.flush();
-  
-}
-//=======================================================================
+char clientMQTTID[] = "MQTT-Senai";
+char userMQTT[] = "IoT-A";
+char passMQTT[] = "S3n41-1o7";
 
 EthernetClient ethClient;
 PubSubClient client(server,port,callback,ethClient);
 
-char clientMQTTID[] = "MQTT-Senai-IoT-A_ACG";
-char userMQTT[] = "IoT-A";
-char passMQTT[] = "S3n41-1o7";
-
 void setup() {
 
   serialSetup();
-//  ethernetSetup();
-//  serverMQTTSetup();
+  ethernetSetup();
   pinMode(spotLight, OUTPUT);
-  pinMode(button, INPUT);
+  
+  pinMode(onlineLight, OUTPUT);
+  pinMode(offlineLight, OUTPUT);
+  
+  pinMode(buttonLight, INPUT);
+  pinMode(buttonDoor, INPUT);
+  
   myservo.attach(7);
+  myservo.write(0);
   
 }
 
 void loop() {
 
-  //inputRequest();
+  inputRequest();
+  showOnline();
+  
+  client.loop();
+  
   readButtonDoorState();
-  readButtonLightState()
+  readButtonLightState();
 
   if (actionDoor != beforeActionDoor) {
 
@@ -92,8 +100,6 @@ void loop() {
   
      showInformation();  
      beforeActionDoor = actionDoor;
-
-    // delay(5000);
 
   }
   
@@ -130,15 +136,27 @@ boolean closeDoor() {
   
 }
 
-
 void showInformation() {
 
   String message;
+  char msgMQTT; 
   
   if (actionDoor == 'A' && beforeActionDoor == 'F') {
     message = "Garagem aberta e luzes acessas!";
+    if (!client.connected()) {
+       reconnectMQTT();
+    }
+    client.publish(topicPub, "A");
+    msgMQTT = "A";
+//    showInformationMQTT("A");
   } else if (actionDoor == 'F' && beforeActionDoor == 'A') {
     message = "Garagem fechada e luzes apagadas!";
+    if (!client.connected()) {
+       reconnectMQTT();
+    }
+    client.publish(topicPub, "F");   
+    msgMQTT = "F";
+//    showInformationMQTT("F");
   } else {
     if (actionDoor == 'A') {
       message = "Nao e possivel abrir a porta! Garagem ja aberta!";
@@ -146,9 +164,9 @@ void showInformation() {
       message = "Nao e possivel fechar a porta! Garagem ja fechada!";
     }
   }
-  
+
   Serial.println(message);
-  
+      
 }
 
 boolean lightOn() {
@@ -165,6 +183,7 @@ void inputRequest() {
   if (!client.connected()) {
     reconnectMQTT();
   }
+
 }
 
 void ethernetSetup() {
@@ -178,17 +197,9 @@ void ethernetSetup() {
   
 }
 
-void serverMQTTSetup() {
-
-   client.setServer(server, port);
-   client.setCallback(callback);
-  
-}
-
 void reconnectMQTT() {
   
-    char messageMQTT[] = "Teste";
-
+    char messageMQTT[] = "Online";
     while (!client.connected()) {
       
        Serial.print("Conectando MQTT ...");
@@ -196,12 +207,18 @@ void reconnectMQTT() {
        if (client.connect(clientMQTTID,userMQTT,passMQTT)) {
           Serial.println("conectado");    
           client.publish(topicPub,messageMQTT);
-          client.subscribe(topicSub);
+          if (!client.subscribe("Garage_Project")) {
+              Serial.println("Erro na subscrição");
+          } else {
+              Serial.println("Subscrição realizada com sucesso");
+          }
+          online = 1;
        } else {
           Serial.print("falha, rc=");
           Serial.print(client.state());
           Serial.println(" nova tentativa em 5 segundos");
           delay(5000);
+          online = 0;
        }
    }
 
@@ -241,3 +258,65 @@ void readButtonLightState() {
     buttonLightStateBefore = buttonLightState;
 }
 
+void showOnline() {
+
+  
+  if (online) {
+     digitalWrite(onlineLight, HIGH);  
+     digitalWrite(offlineLight, LOW);    
+  } else {
+     digitalWrite(offlineLight, HIGH);
+     digitalWrite(onlineLight, LOW);    
+  }
+
+}
+
+void showInformationMQTT(String msg) {
+
+  char msgMQTT = msg.c_str();
+
+  if (!client.connected()) {
+     reconnectMQTT();
+  }
+  
+  client.publish(topicPub, msgMQTT);
+   
+}
+     
+void callback(const char topic, byte* payload, unsigned int length) {
+  
+  // handle message arrived
+  Serial.print("Callback: ");
+  Serial.println(String(topic));
+
+  char* payloadAsChar = payload;
+
+  // Workaround para pequeno bug na biblioteca
+  payloadAsChar[length] = 0;
+
+  // Converter em tipo String para conveniência
+  String topicStr = String(topic);
+  String msg = String(payloadAsChar);
+  Serial.print("Topic received: "); Serial.println(String(topic));
+  Serial.print("Message: "); Serial.println(msg);
+
+  if (msg == "A") {
+     actionDoor = 'A';
+  } else if (msg == "F") {
+     actionDoor = 'F';
+  } 
+
+  Serial.println(actionDoor);
+
+  // Dentro do callback da biblioteca MQTT,
+  // devemos usar Serial.flush() para garantir que as mensagens serão enviadas
+  Serial.flush();
+
+  // https://www.arduino.cc/en/Reference/StringToInt
+  int msgComoNumero = msg.toInt();
+
+  Serial.print("Numero recebido: "); Serial.println(msgComoNumero);
+  Serial.flush();
+
+}
+     
